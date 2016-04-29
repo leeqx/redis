@@ -1542,6 +1542,8 @@ void initServerConfig(void) {
     server.assert_line = 0;
     server.bug_report_start = 0;
     server.watchdog_period = 0;
+    server.ip_limit_list = listCreate();
+    server.ip_limit_list->match=strcasecmp;
 }
 
 /* This function will try to raise the max number of open files accordingly to

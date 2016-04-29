@@ -544,6 +544,17 @@ void loadServerConfigFromString(char *config) {
                 err = sentinelHandleConfiguration(argv+1,argc-1);
                 if (err) goto loaderr;
             }
+        } else if(!strcasecmp(argv[0],"ip-limit") && argc > 2) { // ip 限制
+            if (!strcasecmp(argv[1],"yes"))
+            {
+                for(int i = 1;i< argc;i++)
+                {
+                    listAddNodeTail(server.ip_limit_list,(void*)argv[i]);
+                }
+            } else if (strcasecmp(argv[1],"no")){
+                err = "invalid value:should be yes|no";
+            }
+
         } else {
             err = "Bad directive or wrong number of arguments"; goto loaderr;
         }

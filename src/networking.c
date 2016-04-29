@@ -590,7 +590,15 @@ static void acceptCommonHandler(int fd, int flags) {
     server.stat_numconnections++;
     c->flags |= flags;
 }
-
+int checkIpLImit(const char* const ip)
+{
+    if (NULL != listSearchKey(server.ip_limit_list,(void*)ip))
+    {
+        return 0;
+    } else {
+        return 1;
+    }
+}
 void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cport, cfd, max = MAX_ACCEPTS_PER_CALL;
     char cip[REDIS_IP_STR_LEN];
@@ -607,6 +615,12 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
         redisLog(REDIS_VERBOSE,"Accepted %s:%d", cip, cport);
+        if(0 == checkIpLImit(cip))
+        {
+            redisLog(REDIS_WARNING," ip limit:%s",cip);
+            close(cfd);
+            continue;
+        }
         acceptCommonHandler(cfd,0);
     }
 }
