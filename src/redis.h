@@ -923,6 +923,7 @@ struct redisServer {
     /* System hardware info */
     size_t system_memory_size;  /* Total memory in system as reported by OS */
     list *ip_limit_list; /* ip limit list*/
+    int  *ip_stat; /* on|off,client ip statistic*/
 };
 
 typedef struct pubsubPattern {

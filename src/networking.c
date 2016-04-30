@@ -590,15 +590,40 @@ static void acceptCommonHandler(int fd, int flags) {
     server.stat_numconnections++;
     c->flags |= flags;
 }
-int checkIpLImit(const char* const ip)
-{
-    if (NULL != listSearchKey(server.ip_limit_list,(void*)ip))
-    {
+int checkIpLImit(const char* const ip) {
+    if (NULL != listSearchKey(server.ip_limit_list,(void*)ip)) {
         return 0;
     } else {
         return 1;
     }
 }
+void incrIpStat(const char* const ip,int incr) {
+    if (ip == NULL || incr <= 0) {
+        return ;
+    }
+    redisClient *c = zmalloc(sizeof(redisClient));
+
+    selectDb(c,0);
+    robj *key= createRawStringObject(ip, strlen(ip));
+    robj *oldObj = lookupKeyRead(c->db, key);
+    robj *val;
+    if (oldObj == NULL ) {
+        val = createStringObjectFromLongLong(1);
+        setKey(c->db,key,val);
+        redisLog(REDIS_WARNING," ip stat:%s %d",ip,1);
+    } else {
+        long long oldVal = 0;
+        getLongLongFromObject(oldObj,&oldVal);
+        val = createStringObjectFromLongLong(oldVal + 1);
+        setKey(c->db,key,val);
+        freeStringObject(oldObj);
+        redisLog(REDIS_WARNING," ip stat:%s %d",ip,oldVal + 1);
+    }
+    zfree(c);
+    freeStringObject(val);
+    freeStringObject(key);
+}
+
 void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cport, cfd, max = MAX_ACCEPTS_PER_CALL;
     char cip[REDIS_IP_STR_LEN];
@@ -620,6 +645,10 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
             redisLog(REDIS_WARNING," ip limit:%s",cip);
             close(cfd);
             continue;
+        }
+        if(server.ip_stat)
+        {
+            incrIpStat(cip,1);
         }
         acceptCommonHandler(cfd,0);
     }

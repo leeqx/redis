@@ -554,7 +554,16 @@ void loadServerConfigFromString(char *config) {
             } else if (strcasecmp(argv[1],"no")){
                 err = "invalid value:should be yes|no";
             }
-
+        } else if( !strcasecmp(argv[0],"ip-stat")) {
+            if( argc < 1) {
+                err = "invalid argc for ip-stat: ip-stat yes";
+                goto loaderr;
+            }
+            int yes;
+            if(-1 == (yes=yesnotoi(argv[1]))) {
+                err = "must be yes or no";goto loaderr;
+            }
+            server.ip_stat = yes;
         } else {
             err = "Bad directive or wrong number of arguments"; goto loaderr;
         }
