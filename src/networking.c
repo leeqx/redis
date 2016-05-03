@@ -590,34 +590,86 @@ static void acceptCommonHandler(int fd, int flags) {
     server.stat_numconnections++;
     c->flags |= flags;
 }
+//0 -check false ,1-check throught
 int checkIpLImit(const char* const ip) {
-    if (NULL != listSearchKey(server.ip_limit_list,(void*)ip)) {
-        return 0;
+    listNode* lnode= listSearchKey(server.ip_limit_list,(void*)ip);
+    if(lnode == NULL) {
+        redisLog(REDIS_DEBUG," not found ip:%s",ip);
+        return 1;
     } else {
+        rIpLimit *node = (rIpLimit*)lnode->value;
+        if(node == NULL) {
+            redisLog(REDIS_DEBUG," node is NULL");
+            return 0;
+        }
+        if( node->interval == -1) {
+            return  0;
+        } else if (server.ip_stat) {
+            redisClient *c = zmalloc(sizeof(redisClient));
+            selectDb(c,0);
+            char szKey[40];
+            int len = snprintf(szKey,40,"%s-%d",ip,node->interval);
+            robj *key= createRawStringObject(szKey, len);
+            robj *oldObj = lookupKeyRead(c->db, key);
+            int ret = 1;
+            long long val;
+            if(oldObj == NULL) {
+                ret = 1;
+            } else if(0 == getLongLongFromObject(oldObj,&val) && node->threshold <= val){
+                redisLog(REDIS_WARNING,"Refuse connect, ip limit: %s count:%d rule: threshold:%d interval:%d",ip,val,node->threshold,node->interval);
+                ret = 0;
+            } else {
+                ret = 1;
+            }
+            freeStringObject(oldObj);
+            freeStringObject(key);
+            zfree(c);
+            return ret;
+        }
+        else {
+            redisLog(REDIS_WARNING," ip stat is not open");
+        }
         return 1;
     }
 }
 void incrIpStat(const char* const ip,int incr) {
+    _incrIpStat(ip,incr,0);
+    _incrIpStat(ip,incr,1000);      // 1sec
+    _incrIpStat(ip,incr,60*1000);   // 1min
+    _incrIpStat(ip,incr,3600*1000); // 1hour
+}
+
+void _incrIpStat(const char* const ip,int incr,int msec) {
     if (ip == NULL || incr <= 0) {
         return ;
     }
     redisClient *c = zmalloc(sizeof(redisClient));
 
     selectDb(c,0);
-    robj *key= createRawStringObject(ip, strlen(ip));
+    char szKeySec[40];
+    int keyLen= 0;
+    if(msec)
+        keyLen = snprintf(szKeySec,40,"%s-%d",ip,msec/1000);
+    else
+        keyLen = snprintf(szKeySec,40,"%s",ip);
+
+    robj *key    = createRawStringObject(szKeySec, keyLen);
     robj *oldObj = lookupKeyRead(c->db, key);
     robj *val;
     if (oldObj == NULL ) {
-        val = createStringObjectFromLongLong(1);
+        val = createStringObjectFromLongLong(incr);
         setKey(c->db,key,val);
-        redisLog(REDIS_WARNING," ip stat:%s %d",ip,1);
+        redisLog(REDIS_WARNING,"no found,ip stat create new:%s %d",szKeySec,1);
+        if(msec != 0) {
+            setExpire(c->db,key,msec + mstime());
+        }
     } else {
         long long oldVal = 0;
         getLongLongFromObject(oldObj,&oldVal);
-        val = createStringObjectFromLongLong(oldVal + 1);
+        val = createStringObjectFromLongLong(oldVal + incr);
         setKey(c->db,key,val);
         freeStringObject(oldObj);
-        redisLog(REDIS_WARNING," ip stat:%s %d",ip,oldVal + 1);
+        redisLog(REDIS_WARNING," ip stat incr:%s %d",szKeySec,oldVal + incr);
     }
     zfree(c);
     freeStringObject(val);
@@ -640,15 +692,14 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
             return;
         }
         redisLog(REDIS_VERBOSE,"Accepted %s:%d", cip, cport);
-        if(0 == checkIpLImit(cip))
-        {
-            redisLog(REDIS_WARNING," ip limit:%s",cip);
-            close(cfd);
-            continue;
-        }
         if(server.ip_stat)
         {
             incrIpStat(cip,1);
+        }
+        if(0 == checkIpLImit(cip))
+        {
+            close(cfd);
+            continue;
         }
         acceptCommonHandler(cfd,0);
     }

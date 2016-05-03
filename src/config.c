@@ -547,12 +547,47 @@ void loadServerConfigFromString(char *config) {
         } else if(!strcasecmp(argv[0],"ip-limit") && argc > 2) { // ip 限制
             if (!strcasecmp(argv[1],"yes"))
             {
-                for(int i = 1;i< argc;i++)
-                {
-                    listAddNodeTail(server.ip_limit_list,(void*)argv[i]);
+                unsigned int interval;
+                rIpLimit  *limit = NULL;
+                // configure format: ip threshold(flag) ip threshold(flag)
+                for(int i = 2;i< argc-1;i++) {
+                    limit =(rIpLimit*) zmalloc(sizeof(*limit));
+                    // ip parse
+                    memset(limit->ip,0x0,sizeof(limit->ip));
+                    memcpy(limit->ip,argv[i],strlen(argv[i])+1);
+                    // threshold parse
+                    i = i+1;
+                    char endFlag = argv[i][strlen(argv[i])-1];
+                    if( endFlag == 's'|| endFlag == 'S') {
+                        endFlag = '\0';
+                        limit->threshold = atoi(argv[i]);
+                        limit->interval = 1;
+                    } else if( endFlag == 'h'|| endFlag == 'H') {
+                        endFlag = '\0';
+                        limit->threshold = atoi(argv[i]);
+                        limit->interval = 3600;
+                    } else if( endFlag == 'm'|| endFlag == 'M') {
+                        endFlag = '\0';
+                        limit->threshold = atoi(argv[i]);
+                        limit->interval  = 60 ;
+                    } else if( endFlag == 'f'|| endFlag == 'F') {
+                        limit->threshold = 0;
+                        limit->interval  =  -1;
+                    } else if( isalpha(endFlag)) {
+                        err = " unsupported flag just h:m:s:f is support";
+                        redisLog(REDIS_WARNING,"flag:%d %c",strlen(argv[i]),endFlag);
+                        goto loaderr;
+                    } else {// default is second
+                        limit->interval = 1;
+                        limit->threshold = atoi(argv[i]);
+                    }
+                    redisLog(REDIS_WARNING,"config add new ip:%s threshold:%d interval:%d",limit->ip,limit->threshold,limit->interval);
+                    listAddNodeTail(server.ip_limit_list,(void*)limit);
                 }
             } else if (strcasecmp(argv[1],"no")){
                 err = "invalid value:should be yes|no";
+            } else {
+                redisLog(REDIS_WARNING,"ip limit is close");
             }
         } else if( !strcasecmp(argv[0],"ip-stat")) {
             if( argc < 1) {

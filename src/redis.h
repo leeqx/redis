@@ -415,7 +415,11 @@ typedef long long mstime_t; /* millisecond time type. */
 /*-----------------------------------------------------------------------------
  * Data types
  *----------------------------------------------------------------------------*/
-
+typedef struct redisIpLimit {
+    char ip[33];
+    int threshold;
+    unsigned int interval;/* in seconds*/
+} rIpLimit;
 /* A redis object, that is a type able to hold a string / list / set */
 
 /* The actual Redis Object */

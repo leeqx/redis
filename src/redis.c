@@ -344,13 +344,24 @@ void redisLog(int level, const char *fmt, ...) {
 
     if ((level&0xff) < server.verbosity) return;
 
+    int len = 0;
+#ifdef __GNUC__
+    len = snprintf(msg,sizeof(msg),"%s-%d:",__func__,__LINE__);
+#endif
     va_start(ap, fmt);
-    vsnprintf(msg, sizeof(msg), fmt, ap);
+    vsnprintf(msg+len, sizeof(msg)-len, fmt, ap);
     va_end(ap);
 
     redisLogRaw(level,msg);
 }
-
+/*
+ * For ip-limit to search ip */
+int ipLimitCmp (void* srcVal,void* ip) {
+    if(srcVal == NULL || ip == NULL) {
+        return 0;
+    }
+    return strcmp(((rIpLimit *)srcVal)->ip,(char*)ip)==0? 1:0;
+}
 /* Log a fixed message without printf-alike capabilities, in a way that is
  * safe to call from a signal handler.
  *
@@ -1543,7 +1554,7 @@ void initServerConfig(void) {
     server.bug_report_start = 0;
     server.watchdog_period = 0;
     server.ip_limit_list = listCreate();
-    server.ip_limit_list->match=strcasecmp;
+    server.ip_limit_list->match=ipLimitCmp;
     server.ip_stat  =  0;
 }
 
